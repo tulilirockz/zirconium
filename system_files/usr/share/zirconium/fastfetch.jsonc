@@ -18,13 +18,8 @@
         },
         "break",
         {
-            "type": "command",
-            "key": " 󱋩",
-            "text": "/usr/libexec/bazzite-fetch-image"
-        },
-        {
             "type": "os",
-            "key": " 󰣛",
+            "key": " ",
             "format": "{pretty-name}"
         },
         {
