@@ -1,5 +1,10 @@
 zdots_path := "/usr/share/zirconium/zdots"
 
+import "/usr/share/ublue-os/just/update.just"
+import "/usr/share/ublue-os/just/shared.just"
+import "/usr/share/ublue-os/just/default.just"
+set allow-duplicate-recipes := true
+
 default:
     @zjust --choose
 
@@ -82,13 +87,6 @@ reset-niri:
 update-greeter:
     dms greeter sync
 
-update:
-    sudo uupd
-
-tpm2:
+enroll-secure-boot-key:
     #!/usr/bin/env bash
-    if ! command -v gum &>/dev/null ; then
-        echo "This script requires gum to run, install it: brew install gum"
-        exit 1
-    fi
-    /usr/bin/luks-tpm2-autounlock
+    echo "This is not implemented yet!"

@@ -70,6 +70,7 @@ dnf -y install \
     orca \
     pipewire \
     playerctl \
+    powerstat \
     steam-devices \
     udiskie \
     webp-pixbuf-loader \
