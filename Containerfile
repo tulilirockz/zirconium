@@ -2,13 +2,13 @@ ARG BUILD_FLAVOR="${BUILD_FLAVOR:-}"
 
 FROM scratch AS ctx
 
+COPY assets /assets
+COPY build_files /build
+COPY system_files /files
+COPY cosign.pub /files/etc/pki/containers/zirconium.pub
 COPY --from=ghcr.io/projectbluefin/common:latest /system_files/shared/usr/bin/luks* /files/usr/bin
 COPY --from=ghcr.io/projectbluefin/common:latest /system_files/shared/usr/share/ublue-os/just /files/usr/share/ublue-os/just
 COPY --from=ghcr.io/ublue-os/brew:latest /system_files /files
-COPY assets /assets
-COPY build_files /build
-COPY cosign.pub /files/etc/pki/containers/zirconium.pub
-COPY system_files /files
 
 FROM quay.io/fedora/fedora-bootc:43
 ARG BUILD_FLAVOR="${BUILD_FLAVOR:-}"

@@ -66,6 +66,7 @@ dnf -y install \
     input-remapper \
     just \
     nautilus \
+    nautilus-python \
     openssh-askpass \
     orca \
     pipewire \
@@ -77,6 +78,7 @@ dnf -y install \
     wl-clipboard \
     xdg-desktop-portal-gnome \
     xdg-desktop-portal-gtk \
+    xdg-terminal-exec \
     xdg-user-dirs \
     xwayland-satellite
 
@@ -144,6 +146,11 @@ install -Dpm0644 -t /usr/share/zirconium/skel/Pictures/Wallpapers/ /ctx/assets/w
 install -Dpm0644 -t /usr/share/zirconium/pixmaps/ /ctx/assets/logos/logo-z.svg
 
 mkdir -p "/usr/share/fonts/Maple Mono"
+
+XDG_EXT_TMPDIR="$(mktemp -d)"
+curl -fsSLo - "$(curl -fsSL https://api.github.com/repos/tulilirockz/xdg-terminal-exec-nautilus/releases/latest | jq -rc .tarball_url)" | tar -xzvf - -C "${XDG_EXT_TMPDIR}"
+install -Dpm0644 -t "/usr/share/nautilus-python/extensions/" "${XDG_EXT_TMPDIR}"/*/xdg-terminal-exec-nautilus.py
+rm -rf "${XDG_EXT_TMPDIR}"
 
 MAPLE_TMPDIR="$(mktemp -d)"
 LATEST_RELEASE_FONT="$(curl --retry 3 "https://api.github.com/repos/subframe7536/maple-font/releases/latest" | jq '.assets[] | select(.name == "MapleMono-Variable.zip") | .browser_download_url' -rc)"
