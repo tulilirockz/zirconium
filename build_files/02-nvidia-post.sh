@@ -9,10 +9,12 @@ set -xeuo pipefail
 KERNEL_VERSION="$(find "/usr/lib/modules" -maxdepth 1 -type d ! -path "/usr/lib/modules" -exec basename '{}' ';' | sort | tail -n 1)"
 
 mkdir -p /var/tmp # for akmods
+mkdir -p /var/log/akmods
+mkdir -p /run/akmods
 chmod 1777 /var/tmp
 akmods --force --kernels "${KERNEL_VERSION}" --kmod "nvidia"
-cat /var/cache/akmods/nvidia/*.failed.log || true
-stat /usr/lib/modules/*/extra/nvidia*.ko # We actually need the kernel objects after build LOL
+find /usr/lib/modules -iname "nvidia*.ko*"
+stat "/usr/lib/modules/${KERNEL_VERSION}"/extra/nvidia/nvidia*.ko* # We actually need the kernel objects after build LOL
 
 tee /usr/lib/modprobe.d/00-nouveau-blacklist.conf <<'EOF'
 blacklist nouveau
