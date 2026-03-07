@@ -1,28 +1,26 @@
-image := env("IMAGE_FULL", "zirconium:latest")
+image := env("IMAGE_FULL", "localhost/zirconium:latest")
 filesystem := env("BUILD_FILESYSTEM", "ext4")
 
-iso $image=image:
-    #!/usr/bin/env bash
-    mkdir -p output
-    sudo podman pull "${image}"
-    sudo podman run \
-        --rm \
-        -it \
-        --privileged \
-        --pull=newer \
-        --security-opt label=type:unconfined_t \
-        -v "./iso.toml:/config.toml:ro" \
-        -v ./output:/output \
-        -v /var/lib/containers/storage:/var/lib/containers/storage \
-        ghcr.io/osbuild/bootc-image-builder:latest \
-        --type iso \
-        --rootfs btrfs \
-        --use-librepo=True \
-        "${image}"
+default: build load ostree-rechunk
 
-rootful $image=image:
+build:
+    mkosi -B
+
+load:
     #!/usr/bin/env bash
-    podman image scp $USER@localhost::$image root@localhost::$image
+    set -x
+    sudo podman load -i "$(find mkosi.profiles/bootc-ostree/mkosi.output/* -maxdepth 0 -type d -printf "%T@ ,%p\n" -iname "_*" -print0 | sort -n | head -n1 | cut -d, -f2)" -q | cut -d: -f3 | xargs -I{} sudo podman tag {} {{image}}
+
+ostree-rechunk:
+    #!/usr/bin/env bash
+    sudo podman run --rm \
+          --privileged \
+          -t \
+          -v /var/lib/containers:/var/lib/containers \
+          "quay.io/centos-bootc/centos-bootc:stream10" \
+          /usr/libexec/bootc-base-imagectl rechunk \
+          "{{image}}" \
+          "{{image}}" || exit 1
 
 bootc *ARGS:
     sudo podman run \
@@ -43,9 +41,16 @@ disk-image $filesystem=filesystem:
     fi
     just bootc install to-disk --via-loopback /data/bootable.img --filesystem "${filesystem}" --wipe
 
-quick-iterate:
+rechunk:
     #!/usr/bin/env bash
-    set -xeuo pipefail
-    podman build -t zirconium:latest .
-    just rootful
+    IMG="{{ image }}"
+    # podman pull $IMG # image must be available locally
+    export CHUNKAH_CONFIG_STR=$(sudo podman inspect $IMG)
+    sudo podman run --rm --mount=type=image,src=$IMG,dest=/chunkah -e CHUNKAH_CONFIG_STR quay.io/jlebon/chunkah build --label ostree.bootable=1 | sudo podman load
+
+quick-iterate:
+    just build
+    just load
+    just ostree-rechunk
     BUILD_BASE_DIR=/tmp just disk-image
+    vmbuddy -f /tmp/bootable.img
