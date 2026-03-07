@@ -1,5 +1,18 @@
 cosign.key
+**/cosign.key
 _build_*
 output
 _build-*/**
 *.img
+# SPDX-License-Identifier: LGPL-2.1-or-later
+mkosi.local/
+mkosi.local.conf
+mkosi.output/
+mkosi.cache/
+mkosi.tools/
+mkosi.tools.manifest
+mkosi.key
+mkosi.crt
+mkosi.version
+mkosi.rootpw
+.mkosi-private
