@@ -124,7 +124,7 @@ jobs:
         run: |
           PROFILE_ARGUMENTS=()
           if [ "$CI_MKOSI_PROFILES" != "" ] ; then
-            PROFILE_ARGUMENTS+=("--profiles" "$CI_MKOSI_PROFILES")
+            PROFILE_ARGUMENTS+=("--profile=$CI_MKOSI_PROFILES")
           fi
           sudo env IMAGE_FULL="localhost/${IMAGE_NAME}:latest" mkosi -B ${PROFILE_ARGUMENTS}
 
