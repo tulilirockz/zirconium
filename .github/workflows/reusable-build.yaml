@@ -112,7 +112,7 @@ jobs:
       - name: Install dependencies for build
         run: |
           set -x
-          sudo apt install -y --no-install-recommends bubblewrap build-essential debian-archive-keyring deltarpm dnf dnf-data erofs-utils python3-dnf python3-gpg python3-hawkey python3-libcomps python3-libdnf python3-pefile python3-rpm python3-unbound
+          sudo apt install -y --no-install-recommends bubblewrap debian-archive-keyring python3-gpg python3-hawkey python3-libcomps python3-unbound
           git clone https://github.com/systemd/mkosi.git
           sudo mv mkosi /usr/src/mkosi
           sudo ln -sf "/usr/src/mkosi/bin/mkosi" /usr/bin/mkosi
