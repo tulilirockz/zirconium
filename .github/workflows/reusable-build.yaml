@@ -1,27 +1,75 @@
 ---
-name: Build container image
+name: Build Image
 on:
-  pull_request:
-    branches:
-      - main
-  schedule:
-    - cron: "05 10 * * *" # 10:05am UTC everyday
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - "**/README.md"
-  workflow_dispatch:
+  workflow_call:
+    inputs:
+      image-name:
+        description: "The name of the image to build"
+        required: true
+        type: string
+      image-desc:
+        description: "The description of the image to build"
+        required: false
+        type: string
+      platforms:
+        description: "The platforms to build the image for"
+        required: false
+        type: string
+        default: "amd64,arm64"
+      rechunk:
+        description: "Rechunk the build"
+        required: false
+        type: boolean
+        default: true
+      publish:
+        description: "Publish this image"
+        required: false
+        type: boolean
+        default: true
+      cleanup_action:
+        description: "Use cleanup action from ublue to get more storage on CI"
+        required: false
+        type: boolean
+        default: false
+      profiles:
+        description: "Extra mkosi profiles to use"
+        required: false
+        type: string
+        default: ""
+    secrets:
+      SIGNING_SECRET:
+        description: "The private key used to sign the image"
+        required: false
 
 env:
+  DEFAULT_TAG: "latest"
   IMAGE_DESC: "Opinionated niri + bootc image"
   IMAGE_KEYWORDS: "bootc,niri"
   IMAGE_LOGO_URL: "https://avatars.githubusercontent.com/u/237492973?s=400&v=4"
   IMAGE_NAME: "${{ github.event.repository.name }}"
   IMAGE_REGISTRY: "ghcr.io/${{ github.repository_owner }}"
-  DEFAULT_TAG: "latest"
 
 jobs:
+  generate_matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Set matrix
+        id: set-matrix
+        env:
+          PLATFORMS: "${{ inputs.platforms }}"
+        run: |
+          # turn the comma separated string into a list
+          platforms=()
+          IFS=',' read -r -a platforms <<< "${PLATFORMS}"
+
+          MATRIX="{\"include\":[]}"
+          for platform in "${platforms[@]}"; do
+            MATRIX="$(echo "${MATRIX}" | jq ".include += [{\"platform\": \"${platform}\"}]")"
+          done
+          echo "matrix=$(echo "${MATRIX}" | jq -c '.')" >> $GITHUB_OUTPUT
+
   build_push:
     name: Build and push image
     permissions:
@@ -29,15 +77,14 @@ jobs:
       packages: write
       id-token: write
     timeout-minutes: 60
+    needs: generate_matrix
     strategy:
       fail-fast: false
-      matrix:
-        flavor: ["", "nvidia"]
-        platform: ["amd64", "arm64"]
+      matrix: ${{fromJson(needs.generate_matrix.outputs.matrix)}}
     runs-on: ${{ matrix.platform == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
     steps:
       - name: Mount BTRFS for podman storage
-        if: ${{ matrix.platform != 'arm64' }}
+        if: matrix.platform != 'arm64' && inputs.cleanup_action
         uses: ublue-os/container-storage-action@911baca08baf30c8654933e9e9723cb399892140
         continue-on-error: true
         with:
@@ -49,30 +96,53 @@ jobs:
         with:
           submodules: true
 
-      - name: Change image name depending on build flavor
+      - name: Setup Just
+        uses: extractions/setup-just@e33e0265a09d6d736e2ee1e0eb685ef1de4669ff # v3
+
+      - name: Setup image cache
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         env:
-          BUILD_FLAVOR: ${{ matrix.flavor }}
+          MATRIX_BASE_NAME: ${{ matrix.base_name }}
+        with:
+          path: mkosi.cache
+          key: ${{ runner.os }}-mkosi-${{ env.IMAGE_NAME }}-${{ matrix.platform }}
+          restore-keys: |
+            ${{ runner.os }}-mkosi-${{ env.IMAGE_NAME }}-${{ matrix.platform }}
+
+      - name: Install dependencies for build
         run: |
-          if [ "${BUILD_FLAVOR}" != "" ] ; then
-            echo "IMAGE_NAME=${IMAGE_NAME}-${{ matrix.flavor }}" >> $GITHUB_ENV
-          fi
+          set -x
+          sudo apt install -y mkosi podman git
+          git clone https://github.com/systemd/mkosi.git
+          sudo mv mkosi /usr/src/mkosi
+          sudo ln -sf "/usr/src/mkosi/bin/mkosi" /usr/bin/mkosi
 
       - name: Build image
         id: build
         env:
-          BUILD_FLAVOR: ${{ matrix.flavor }}
-        run: sudo podman build "--build-arg=BUILD_FLAVOR=${BUILD_FLAVOR}" -t "${IMAGE_NAME}:${DEFAULT_TAG}" -f ./Containerfile .
-
-      - name: Rechunk Image
-        run: sudo podman run --rm --privileged -v /var/lib/containers:/var/lib/containers --entrypoint /usr/libexec/bootc-base-imagectl "localhost/${IMAGE_NAME}:${DEFAULT_TAG}" rechunk --max-layers 67 "localhost/${IMAGE_NAME}:${DEFAULT_TAG}" "localhost/${IMAGE_NAME}:${DEFAULT_TAG}"
-
-      # TODO: remove me when we have a new podman in 26.04 runners
-      # needed because old podman doesn't push layer annotations for
-      # the rpm-ostree rechunker at all
-      - name: Install Podman from Brew
-        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+          CI_MKOSI_PROFILES: ${{matrix.profiles}}
         run: |
-          /home/linuxbrew/.linuxbrew/bin/brew install podman
+          PROFILE_ARGUMENTS=()
+          if [ "$CI_MKOSI_PROFILES" != "" ] ; then
+            PROFILE_ARGUMENTS+=("--profiles" "$CI_MKOSI_PROFILES")
+          fi
+          sudo env IMAGE_FULL="localhost/${IMAGE_NAME}:latest" mkosi -B ${PROFILE_ARGUMENTS}
+
+      - name: Load image
+        id: load
+        run: |
+          sudo env IMAGE_FULL="localhost/${IMAGE_NAME}:latest" $(which just) load
+
+      - name: Rechunk image
+        id: rechunk
+        run: |
+          sudo env IMAGE_FULL="localhost/${IMAGE_NAME}:latest" $(which just) ostree-rechunk
+
+      # https://github.com/actions/cache/issues/1533
+      - name: Hack around permission issue caching
+        id: cache-perms
+        run: |
+          sudo chmod 777 --recursive mkosi.cache
 
       - name: Login to GitHub Container Registry
         if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
@@ -82,6 +152,14 @@ jobs:
         run: |
           echo "${GITHUB_TOKEN}" | sudo podman login -u "${LOGIN_USER}" --password-stdin "ghcr.io"
           echo "${GITHUB_TOKEN}" | docker login -u "${LOGIN_USER}" --password-stdin "ghcr.io" # For cosign
+
+      # TODO: remove me when we have a new podman in 26.04 runners
+      # needed because old podman doesn't push layer annotations for
+      # the rpm-ostree rechunker at all
+      - name: Install Podman from Brew
+        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        run: |
+          /home/linuxbrew/.linuxbrew/bin/brew install podman
 
       - name: Push to GHCR
         if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
@@ -156,10 +234,6 @@ jobs:
       - name: Install dependencies
         run: apk add bash coreutils curl docker findutils fuse-overlayfs git grep jq podman sed
 
-      - name: Install Cosign
-        uses: sigstore/cosign-installer@v4.0.0
-        if: github.event_name != 'pull_request'
-
       - name: Exit on failure
         shell: bash
         env:
@@ -194,7 +268,7 @@ jobs:
             containers.bootc=1
             io.artifacthub.package.deprecated=false
             io.artifacthub.package.keywords=${{ env.IMAGE_KEYWORDS }}
-            io.artifacthub.package.license=Apache-2.0
+            io.artifacthub.package.license=AGPL-2.0
             io.artifacthub.package.logo-url=${{ env.IMAGE_LOGO_URL }}
             io.artifacthub.package.prerelease=false
             io.artifacthub.package.readme-url=https://raw.githubusercontent.com/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}/${{ github.sha }}/README.md
@@ -238,6 +312,10 @@ jobs:
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | podman login -u "${{ github.actor }}" --password-stdin "${REGISTRY}"
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login -u "${{ github.actor }}" --password-stdin "${REGISTRY}"
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v4.0.0
+        if: github.event_name != 'pull_request'
 
       - name: Publish manifest with unified architecture and sign
         shell: bash
