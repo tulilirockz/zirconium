@@ -10,4 +10,4 @@ sed -i 's|uupd|& --disable-module-distrobox|' /usr/lib/systemd/system/uupd.servi
 # For podman rootless
 chmod 0755 /usr/bin/newuidmap /usr/bin/newgidmap
 chmod u+s /usr/bin/newuidmap
-chmod g+s /usr/bin/newgidmap
+chmod u+s /usr/bin/newgidmap
