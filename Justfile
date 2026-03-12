@@ -23,7 +23,7 @@ ostree-rechunk:
           -t \
           -v /var/lib/containers:/var/lib/containers \
           "quay.io/centos-bootc/centos-bootc:stream10" \
-          /usr/libexec/bootc-base-imagectl rechunk \
+          /usr/libexec/bootc-base-imagectl rechunk --max-layers 67 \
           "{{image}}" \
           "{{image}}" || exit 1
 
@@ -59,9 +59,6 @@ rechunk:
         cut -d: -f3 | \
         xargs -I{} sudo podman tag {} {{image}}
 
-quick-iterate:
-    just build
-    just load
-    just ostree-rechunk
-    BUILD_BASE_DIR=/tmp just disk-image
-    vmbuddy -f /tmp/bootable.img
+clean:
+    mkosi clean
+    sudo rm -r mkosi.tools/ mkosi.cache/
