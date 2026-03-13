@@ -2,14 +2,20 @@ image := env("IMAGE_FULL", "localhost/zirconium:latest")
 filesystem := env("BUILD_FILESYSTEM", "ext4")
 
 default:
+    #!/usr/bin/env bash
+    set -xeuo pipefail
     just build
     sudo just load
+    sudo just lint
     sudo just ostree-rechunk
     sudo env BUILD_BASE_DIR=/tmp just disk-image
     vmbuddy -f /tmp/bootable.img
 
 build:
-    mkosi -B
+    mkosi -B --debug
+
+lint:
+    podman run --rm -it --entrypoint=bootc {{ image }} container lint
 
 load:
     #!/usr/bin/env bash

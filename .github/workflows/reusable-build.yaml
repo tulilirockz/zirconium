@@ -138,6 +138,10 @@ jobs:
         run: |
           sudo env IMAGE_FULL="localhost/${IMAGE_NAME}:latest" $(which just) ostree-rechunk
 
+      - name: Lint image
+        run: |
+          sudo env IMAGE_FULL="localhost/${IMAGE_NAME}:latest" $(which just) lint
+
       # https://github.com/actions/cache/issues/1533
       - name: Hack around permission issue caching
         id: cache-perms
