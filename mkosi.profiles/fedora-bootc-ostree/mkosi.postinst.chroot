@@ -8,8 +8,8 @@ sed -i 's|#LockLayering.*|LockLayering=true|' /etc/rpm-ostreed.conf
 
 # For podman rootless
 chmod 0755 /usr/bin/newuidmap /usr/bin/newgidmap
-chmod u+s /usr/bin/newuidmap
-chmod u+s /usr/bin/newgidmap
+chmod u-s /usr/bin/newuidmap
+chmod u-s /usr/bin/newgidmap
 
 # we need this to get modules apparently
 cp -r "/var/lib/selinux/targeted/active" "/etc/selinux/targeted/"
